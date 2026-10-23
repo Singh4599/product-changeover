@@ -272,33 +272,37 @@ window.selectDate = function(dateStr) {
   const tbody = document.getElementById('pco-tbody');
   if (!tbody) return;
   if (!dayRecs.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:#94A3B8;font-size:13px;">No records for this date.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:#94A3B8;font-size:13px;">No records for this date.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = dayRecs.map((r, i) => {
-    return `
+  tbody.innerHTML = dayRecs.map((r, i) => `
     <tr class="pmr-row">
       <td class="col-sr">${i+1}</td>
-      <td>
-        <div class="product-flow">
-          <span class="prod-pill prod-pill-prev" title="${esc(r.previousProduct)}">${esc(r.previousProduct)}</span>
-          <span class="prod-arrow">→</span>
-          <span class="prod-pill prod-pill-next" title="${esc(r.nextProduct)}">${esc(r.nextProduct)}</span>
-        </div>
-      </td>
-      <td>
+      <td style="font-size:12px;font-weight:600;color:#64748B;">${esc(r.displayDate)}</td>
+      <td><span class="prod-pill prod-pill-prev" title="${esc(r.previousProduct)}">${esc(r.previousProduct)}</span></td>
+      <td style="text-align:center;">
         <span class="cleaning-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg>
-          Yes — All
+          Yes
         </span>
       </td>
+      <td><span class="prod-pill prod-pill-next" title="${esc(r.nextProduct)}">${esc(r.nextProduct)}</span></td>
       <td><span class="time-chip">${esc(r.time)}</span></td>
       <td><span class="worker-name">${esc(r.cleanedBy)}</span></td>
       <td><span class="worker-name" style="color:#2563EB;">${esc(r.checkedBy)}</span></td>
-    </tr>`;
-  }).join('');
+      <td style="text-align:center;white-space:nowrap;">
+        <button onclick="openEditModal('${esc(r.id)}')" title="Edit" style="background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:6px;color:#6366F1;" onmouseover="this.style.background='#EEF2FF'" onmouseout="this.style.background='none'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button onclick="deleteRecord('${esc(r.id)}')" title="Delete" style="background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:6px;color:#EF4444;" onmouseover="this.style.background='#FEF2F2'" onmouseout="this.style.background='none'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </td>
+    </tr>`
+  ).join('');
 };
+
 
 // ── SEARCH ────────────────────────────────────────────────────────────────────
 window.onSearchChange = function(v) {
@@ -367,8 +371,25 @@ window.openAddModal = function() {
   if (g('m-time')) g('m-time').value = '09:30 AM';
   document.getElementById('modal-overlay').style.display = 'flex';
 };
+// ── DELETE RECORD ─────────────────────────────────────────────────────────────
+window.deleteRecord = function(id) {
+  const rec = allRecords.find(r => r.id === id);
+  if (!rec) return;
+  const label = `${rec.displayDate} — ${rec.previousProduct} → ${rec.nextProduct}`;
+  if (!confirm(`Delete this record?\n\n${label}\n\nThis cannot be undone.`)) return;
+
+  // Remove from local array
+  allRecords = allRecords.filter(r => r.id !== id);
+  // Remove from cloud overrides if manually added
+  delete cloudOverrides[id];
+
+  // Re-render
+  renderTable(selectedDate);
+  renderSidebarDates();
+};
 
 window.openEditModal = function(id) {
+
   const rec = allRecords.find(r => r.id === id);
   if (!rec) return;
   editingId = id;
