@@ -37,8 +37,8 @@ const PRODUCTS = [
   'Chilli Powder SP Line'
 ];
 
-const WORKERS     = ['Mukesh Vora','Vinod Singh','SHIVSHANKAR YADAV','Mahesh','Rajkumar','SANVALDAS','Suraj','Suchitra','Anil'];
-const SUPERVISORS = ['BHIMLAL SHARMA','Vishal Chaturvedi'];
+const WORKERS     = ['Mukesh Vora','Vinod Singh','Shiveshankar Yadav','Mahesh','Rajkumar','Sanvaldas','Suraj','Suchitra','Anil'];
+const SUPERVISORS = ['Bhimlal Sharma','Vishal Chaturvedi'];
 const DAYS        = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
