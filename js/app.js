@@ -1,466 +1,493 @@
 // app.js — LV Spices Product Changeover Record
-// Sidebar-style UI: list on left, detail view on right
-// Auto-generates entries from April 2026 to today
+// ✅ LIFETIME: Generates daily records from April 1, 2026 → today (auto-extends every day)
+// ✅ 15-18 changeovers per working day, 9:30 AM → ~5:45 PM, ~30 min intervals
+// ✅ Sidebar: dates grouped by month → click date → table shows all that day's records
+// ✅ Firebase only for manual add/edit (no bulk writes for generated records)
 
-import { saveRecord, loadAllRecords, updateCloudBadge } from './firebase-config.js';
+import { saveRecord as saveEntryToCloud, loadAllRecords as loadAllEntriesFromCloud, updateCloudBadge } from './firebase-config.js';
 
-// ── PRODUCTS & WORKERS ────────────────────────────────────────────────────────
+// ── ACTUAL LV SPICES PRODUCTS ─────────────────────────────────────────────────
 const PRODUCTS = [
-  'Turmeric Powder', 'Red Chilli Powder', 'Coriander Powder', 'Cumin Seeds',
-  'Garam Masala', 'Black Pepper Powder', 'Mustard Seeds', 'Fenugreek Powder',
-  'Cardamom Powder', 'Dry Ginger Powder', 'Fennel Seeds', 'Ajwain (Carom Seeds)',
-  'Clove Powder', 'Kashmiri Chilli Powder', 'Sambhar Masala', 'Chaat Masala'
+  'Golden Turmeric Powder',
+  'Selam Turmeric Powder',
+  'Chilli Powder Kashmiri',
+  'Malvani Mix Special Masala',
+  'Coriander Green Seasoning',
+  'Dhanajeera (Mix Masala Powder)',
+  'Coriander Saras Seasoning',
+  'Reshampatti Khandela Chilli Blend Seasoning',
+  'Dandicut Khandela Chilli Blend Seasoning',
+  'Palitana Khandela Chilli Blend Seasoning',
+  'Kashmiri Khandela Chilli Blend Seasoning',
+  'Chilli Powder SP Lal',
+  'Chilli Powder SP Lal Uncha',
+  'Ginger Seasoning',
+  'Cumin Seasoning',
+  'Dry Mango Seasoning',
+  'Black Pepper Seasoning',
+  'Methi Seasoning',
+  'Coriander Seasoning',
+  'Sambhar Chilli Blend Seasoning',
+  'Sambhar Kashmiri Chilli Blend Seasoning',
+  'Jeera Super',
+  'Rai',
+  'Rajwadi Garam Masala',
+  'Special Garam Masala',
+  'Variyali Seasoning',
+  'Chilli Powder SP Line'
 ];
 
-const WORKERS = [
-  'Rajesh Sharma', 'Mukesh Vora', 'Vinod Singh', 'Vishal Chaturvedi',
-  'Golu Yadav', 'Mahesh', 'Rajkumar', 'Pratap', 'Suraj', 'Suchitra', 'Anil'
-];
-
-const SUPERVISORS = ['Rajesh Sharma', 'Vishal Chaturvedi'];
-
-const TIMES = [
-  '09:15 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM',
-  '11:30 AM', '12:00 PM', '01:00 PM', '01:30 PM', '02:00 PM',
-  '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM'
-];
+const WORKERS     = ['BHIMLAL SHARMA','Mukesh Vora','Vinod Singh','SHIVSHANKAR YADAV','Mahesh','Rajkumar','SANVALDAS','Suraj','Suchitra','Anil'];
+const SUPERVISORS = ['BHIMLAL SHARMA','Vishal Chaturvedi'];
+const DAYS        = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-let allRecords = [];
-let filteredRecords = [];
-let selectedId = null;
-let editingId = null;
-let searchQuery = '';
+let allRecords   = [];  // all generated + cloud records
+let cloudOverrides = {}; // user-edited records from Firebase
+let selectedDate = null; // currently selected date in sidebar
+let searchQuery  = '';
+let editingId    = null;
 
-const MONTH_NAMES = ['APRIL','MAY','JUNE','JULY','AUG','SEP','OCT','NOV','DEC'];
-const MONTH_MAP = {
-  'APRIL':'2026-04','MAY':'2026-05','JUNE':'2026-06','JULY':'2026-07',
-  'AUG':'2026-08','SEP':'2026-09','OCT':'2026-10','NOV':'2026-11','DEC':'2026-12'
-};
-
-function getCurrentMonthKey() {
-  const m = new Date().getMonth();
-  const keys = ['JAN','FEB','MAR','APRIL','MAY','JUNE','JULY','AUG','SEP','OCT','NOV','DEC'];
-  const cur = keys[m];
-  return MONTH_NAMES.includes(cur) ? cur : 'OCT';
-}
-
-let activeMonth = getCurrentMonthKey();
-
-// ── SEEDED RNG ────────────────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function seedRng(seed) {
-  let s = seed;
-  return function() {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return (s >>> 0) / 0xffffffff;
-  };
+  let s = (seed | 0) + 1;
+  return () => { s=(s*1664525+1013904223)&0xffffffff; return (s>>>0)/0xffffffff; };
+}
+function esc(s)  { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+function fmtDate(ds) {
+  if (!ds) return '';
+  const d = new Date(ds + 'T00:00:00');
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+function fmtMonthLabel(ds) {
+  const d = new Date(ds + 'T00:00:00');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+function minutesToTime(m) {
+  const h = Math.floor(m/60);
+  const mn = m % 60;
+  const ampm = h < 12 ? 'AM' : 'PM';
+  return `${(h % 12) || 12}:${String(mn).padStart(2,'0')} ${ampm}`;
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function formatDisplayDate(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const yyyy = d.getFullYear();
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  return { display: `${dd}/${mm}/${yyyy}`, day: days[d.getDay()] };
-}
-
-// ── DATA GENERATION ───────────────────────────────────────────────────────────
-function generateRecords() {
+// ── LIFETIME DATA GENERATION ──────────────────────────────────────────────────
+// Runs from April 1, 2026 → today. Each new day auto-adds records. Seeded = deterministic.
+function generateAllRecords() {
   const records = [];
-  const start = new Date('2026-04-01');
+  const start = new Date('2026-04-01T00:00:00');
   const today = new Date();
+  today.setHours(23,59,59,999);
   let cur = new Date(start);
-  let srCounter = 1;
+  let globalIdx = 1;
 
   while (cur <= today) {
-    const dayOfWeek = cur.getDay();
-    // Skip Sunday
-    if (dayOfWeek !== 0) {
-      const y = cur.getFullYear();
-      const m = String(cur.getMonth()+1).padStart(2,'0');
-      const d = String(cur.getDate()).padStart(2,'0');
-      const dateStr = `${y}-${m}-${d}`;
-      const seed = cur.getTime();
-      const rng = seedRng(seed);
+    const dow = cur.getDay();
+    if (dow !== 0) { // skip Sunday
+      const y  = cur.getFullYear();
+      const mo = String(cur.getMonth()+1).padStart(2,'0');
+      const d  = String(cur.getDate()).padStart(2,'0');
+      const dateStr = `${y}-${mo}-${d}`;
+      const dayName = DAYS[dow];
 
-      // 3-4 changeovers per week: generate on ~60% of working days
-      if (rng() < 0.6) {
-        const count = 1 + Math.floor(rng() * 2); // 1 or 2 changeovers per day
-        let prevProductIdx = Math.floor(rng() * PRODUCTS.length);
+      // Seeded RNG per day (using integer day offset from epoch)
+      const seed = (cur.getTime() / 86400000) | 0;
+      const rng  = seedRng(seed);
 
-        for (let i = 0; i < count; i++) {
-          const nextProductIdx = (prevProductIdx + 1 + Math.floor(rng() * (PRODUCTS.length - 1))) % PRODUCTS.length;
-          const workerIdx = Math.floor(rng() * WORKERS.length);
-          const supervisorIdx = Math.floor(rng() * SUPERVISORS.length);
-          const timeIdx = Math.floor(rng() * TIMES.length);
-          const id = `PCO-${dateStr}-${i+1}`;
+      // Pick 15-18 products for today (realistic: some may repeat, some appear twice)
+      const count = 15 + Math.floor(rng() * 4); // 15-18
 
-          records.push({
-            id,
-            srNo: srCounter++,
-            date: dateStr,
-            displayDate: formatDisplayDate(dateStr).display,
-            dayName: formatDisplayDate(dateStr).day,
-            previousProduct: PRODUCTS[prevProductIdx],
-            cleaningDone: 'Yes',
-            nextProduct: PRODUCTS[nextProductIdx],
-            time: TIMES[timeIdx],
-            cleanedBy: WORKERS[workerIdx],
-            checkedBy: SUPERVISORS[supervisorIdx],
-            isGenerated: true
-          });
+      // Shuffle the full product list
+      const shuffled = [...PRODUCTS];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i+1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
 
-          prevProductIdx = nextProductIdx;
+      // Build a day's product sequence: pick 'count' from shuffled list,
+      // but ~20% chance a product is repeated (produced again later that day)
+      const daySeq = [];
+      for (let i = 0; i < count; i++) {
+        // ~20% chance: pick a random earlier product again (realistic repeat)
+        if (i > 3 && daySeq.length > 2 && rng() < 0.20) {
+          const repeatIdx = Math.floor(rng() * Math.max(1, daySeq.length - 1));
+          daySeq.push(daySeq[repeatIdx]);
+        } else {
+          daySeq.push(shuffled[i % shuffled.length]);
         }
+      }
+
+      // Start 9:30 AM = 570 min; end target ~5:30 PM = 1050 min
+      let timeMin = 570; // 9:30 AM
+
+      for (let i = 0; i < count; i++) {
+        if (timeMin > 1050) break; // don't go past 5:30 PM
+
+        const prevProduct = daySeq[i];
+        const nextProduct = daySeq[i + 1] || shuffled[0];
+        const worker    = WORKERS[Math.floor(rng() * WORKERS.length)];
+        const supervisor = SUPERVISORS[Math.floor(rng() * SUPERVISORS.length)];
+        const id = `PCO-${y}${mo}${d}-${String(globalIdx).padStart(4,'0')}`;
+
+        records.push({
+          id,
+          srNo: i + 1,
+          globalIdx,
+          date: dateStr,
+          displayDate: `${d}/${mo}/${y}`,
+          dayName,
+          monthLabel: fmtMonthLabel(dateStr),
+          previousProduct: prevProduct,
+          cleaningDone: 'Yes',
+          nextProduct,
+          time: minutesToTime(timeMin),
+          timeMin,
+          cleanedBy: worker,
+          checkedBy: supervisor,
+          isGenerated: true
+        });
+
+        globalIdx++;
+        // Next changeover: +27 to +33 min (randomly seeded)
+        timeMin += 27 + Math.floor(rng() * 7);
       }
     }
     cur.setDate(cur.getDate() + 1);
   }
-  return records.reverse(); // newest first
+  return records; // chronological (newest date last)
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
+  updateSidebarStats({ total:0, today:0, workers:0 });
+  document.getElementById('record-list').innerHTML = '<div class="loading-msg">Generating records…</div>';
+
+  // Load cloud overrides (only user-edited/added records)
   try {
-    const cloudData = await loadAllRecords();
-    const cloudMap = {};
-    cloudData.forEach(r => { cloudMap[r.id] = r; });
+    const cloud = await loadAllEntriesFromCloud();
+    cloud.forEach(r => { cloudOverrides[r.id] = r; });
+  } catch(e) { updateCloudBadge(false); }
 
-    const generated = generateRecords();
-    generated.forEach(r => {
-      if (!cloudMap[r.id]) cloudMap[r.id] = r;
-      else cloudMap[r.id] = { ...r, ...cloudMap[r.id] };
-    });
+  // Generate all records (blocking but fast ~5ms)
+  const generated = generateAllRecords();
 
-    allRecords = Object.values(cloudMap).sort((a,b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
-  } catch(e) {
-    allRecords = generateRecords();
-  }
+  // Merge: cloud overrides replace generated records of same ID
+  allRecords = generated.map(r => cloudOverrides[r.id] ? { ...r, ...cloudOverrides[r.id] } : r);
 
-  renderMonthTabs();
-  applyFilter();
-  updateKPIs();
-
-  if (filteredRecords.length > 0) selectRecord(filteredRecords[0].id);
-}
-
-// ── MONTH TABS ────────────────────────────────────────────────────────────────
-function renderMonthTabs() {
-  const bar = document.getElementById('month-tabs');
-  if (!bar) return;
-  bar.innerHTML = MONTH_NAMES.map(m => `
-    <button class="month-tab ${m === activeMonth ? 'active' : ''}" onclick="setMonth('${m}')">${m}</button>
-  `).join('');
-}
-
-window.setMonth = function(m) {
-  activeMonth = m;
-  renderMonthTabs();
-  applyFilter();
-  updateKPIs();
-  if (filteredRecords.length > 0) selectRecord(filteredRecords[0].id);
-  else renderDetail(null);
-};
-
-// ── FILTER ────────────────────────────────────────────────────────────────────
-function applyFilter() {
-  const prefix = MONTH_MAP[activeMonth] || '2026-10';
-  const q = searchQuery.toLowerCase();
-  filteredRecords = allRecords.filter(r => {
-    const inMonth = r.date.startsWith(prefix);
-    if (!q) return inMonth;
-    return inMonth && (
-      r.previousProduct?.toLowerCase().includes(q) ||
-      r.nextProduct?.toLowerCase().includes(q) ||
-      r.cleanedBy?.toLowerCase().includes(q) ||
-      r.checkedBy?.toLowerCase().includes(q) ||
-      r.displayDate?.includes(q)
-    );
+  // Also add cloud-only records (manually added by user, not in generated set)
+  const genIds = new Set(generated.map(r => r.id));
+  Object.values(cloudOverrides).forEach(r => {
+    if (!genIds.has(r.id)) allRecords.push(r);
   });
-  renderSidebar();
-}
 
-window.onSearch = function(val) {
-  searchQuery = val;
-  applyFilter();
-};
+  // Sort: newest date first, then by time within date
+  allRecords.sort((a,b) => b.date.localeCompare(a.date) || (b.timeMin||0) - (a.timeMin||0));
 
-// ── SIDEBAR ───────────────────────────────────────────────────────────────────
-function renderSidebar() {
-  const list = document.getElementById('record-list');
-  if (!list) return;
-  if (filteredRecords.length === 0) {
-    list.innerHTML = `<div class="empty-sidebar">No changeover records for ${activeMonth} 2026</div>`;
-    return;
+  renderSidebarStats();
+  renderSidebarDates();
+
+  // Auto-select today (or most recent day)
+  if (allRecords.length) {
+    const latestDate = allRecords[0].date;
+    selectDate(latestDate);
   }
-  list.innerHTML = filteredRecords.map(r => `
-    <div class="record-item ${r.id === selectedId ? 'active' : ''}" onclick="selectRecord('${r.id}')">
-      <div class="record-item-date">${r.displayDate} <span class="day-chip">${r.dayName}</span></div>
-      <div class="record-item-products">
-        <span class="prev-prod">${escapeHtml(r.previousProduct)}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        <span class="next-prod">${escapeHtml(r.nextProduct)}</span>
-      </div>
-      <div class="record-item-meta">
-        <span class="cleaned-by-chip">${escapeHtml(r.cleanedBy)}</span>
-        <span class="time-chip">${escapeHtml(r.time)}</span>
-      </div>
-    </div>
-  `).join('');
 }
 
-window.selectRecord = function(id) {
-  selectedId = id;
-  renderSidebar();
-  const rec = allRecords.find(r => r.id === id);
-  renderDetail(rec);
-};
-
-// ── DETAIL VIEW ───────────────────────────────────────────────────────────────
-function renderDetail(rec) {
-  const panel = document.getElementById('detail-panel');
-  if (!panel) return;
-  if (!rec) {
-    panel.innerHTML = `
-      <div class="detail-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
-        <p>No record selected</p>
-      </div>`;
-    return;
-  }
-  panel.innerHTML = `
-    <div class="detail-header">
-      <div class="detail-header-left">
-        <div class="detail-date-badge">${rec.displayDate} <span class="detail-day">${rec.dayName}</span></div>
-        <h2 class="detail-title">Product Changeover Record</h2>
-      </div>
-      <div class="detail-header-right">
-        <span class="status-ok-badge">✓ Cleaned</span>
-        <button class="btn-edit-det" onclick="openEditModal('${rec.id}')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Edit
-        </button>
-      </div>
-    </div>
-
-    <div class="detail-cards-grid">
-      <div class="detail-info-card">
-        <div class="dic-icon prev-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
-        </div>
-        <div class="dic-body">
-          <div class="dic-label">Previous Product (Finished)</div>
-          <div class="dic-value">${escapeHtml(rec.previousProduct)}</div>
-        </div>
-      </div>
-      <div class="detail-info-card">
-        <div class="dic-icon next-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        </div>
-        <div class="dic-body">
-          <div class="dic-label">Next Product (Started)</div>
-          <div class="dic-value next-val">${escapeHtml(rec.nextProduct)}</div>
-        </div>
-      </div>
-      <div class="detail-info-card">
-        <div class="dic-icon clean-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>
-        </div>
-        <div class="dic-body">
-          <div class="dic-label">Cleaning Done (Table / Scale / Tools)</div>
-          <div class="dic-value clean-val">${escapeHtml(rec.cleaningDone)}</div>
-        </div>
-      </div>
-      <div class="detail-info-card">
-        <div class="dic-icon time-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </div>
-        <div class="dic-body">
-          <div class="dic-label">Changeover Time</div>
-          <div class="dic-value">${escapeHtml(rec.time)}</div>
-        </div>
-      </div>
-      <div class="detail-info-card">
-        <div class="dic-icon worker-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        </div>
-        <div class="dic-body">
-          <div class="dic-label">Cleaned By</div>
-          <div class="dic-value">${escapeHtml(rec.cleanedBy)}</div>
-        </div>
-      </div>
-      <div class="detail-info-card">
-        <div class="dic-icon checked-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-        </div>
-        <div class="dic-body">
-          <div class="dic-label">Checked By / Supervisor</div>
-          <div class="dic-value">${escapeHtml(rec.checkedBy)}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="changeover-flow-box">
-      <div class="flow-label">Changeover Flow</div>
-      <div class="flow-row">
-        <div class="flow-product prev">
-          <div class="flow-product-label">Previous</div>
-          <div class="flow-product-name">${escapeHtml(rec.previousProduct)}</div>
-        </div>
-        <div class="flow-arrow-wrap">
-          <div class="flow-clean-badge">✓ Cleaned</div>
-          <svg viewBox="0 0 80 24" width="80" height="24" fill="none"><line x1="0" y1="12" x2="68" y2="12" stroke="#22C55E" stroke-width="2" stroke-dasharray="4 2"/><polyline points="60,6 68,12 60,18" stroke="#22C55E" stroke-width="2" fill="none"/></svg>
-        </div>
-        <div class="flow-product next">
-          <div class="flow-product-label">Next</div>
-          <div class="flow-product-name">${escapeHtml(rec.nextProduct)}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="note-box">
-      <strong>Note:</strong> Cleaning of Table, Weighing Scale, and all Tools confirmed before starting next product.
-      Record verified by <strong>${escapeHtml(rec.checkedBy)}</strong> at <strong>${escapeHtml(rec.time)}</strong>.
-    </div>
-  `;
+// ── SIDEBAR STATS ─────────────────────────────────────────────────────────────
+function renderSidebarStats() {
+  const today = new Date().toISOString().split('T')[0];
+  const todayRecs = allRecords.filter(r => r.date === today);
+  const uniqueWorkers = new Set(allRecords.map(r => r.cleanedBy)).size;
+  updateSidebarStats({ total: allRecords.length, today: todayRecs.length, workers: uniqueWorkers });
 }
 
-// ── KPIs ──────────────────────────────────────────────────────────────────────
-function updateKPIs() {
-  const prefix = MONTH_MAP[activeMonth] || '2026-10';
-  const monthRecs = allRecords.filter(r => r.date.startsWith(prefix));
-  const total = monthRecs.length;
-  const cleanedYes = monthRecs.filter(r => r.cleaningDone === 'Yes').length;
-  const uniqueDays = new Set(monthRecs.map(r => r.date)).size;
-  const uniqueWorkers = new Set(monthRecs.map(r => r.cleanedBy)).size;
-
+function updateSidebarStats({ total, today, workers }) {
   const el = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
-  el('kpi-total', total);
-  el('kpi-cleaned', cleanedYes);
-  el('kpi-days', uniqueDays);
-  el('kpi-workers', uniqueWorkers);
+  el('stat-total', total || '—');
+  el('stat-cleaned', today || '—');
+  el('stat-workers', workers || '—');
 }
 
-// ── MODALS ────────────────────────────────────────────────────────────────────
-function populateProductDropdowns() {
-  ['m-prev-product','m-next-product'].forEach(id => {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    sel.innerHTML = PRODUCTS.map(p => `<option value="${p}">${p}</option>`).join('');
+// ── SIDEBAR DATE LIST ─────────────────────────────────────────────────────────
+function renderSidebarDates() {
+  const el = document.getElementById('record-list');
+  if (!el) return;
+
+  // Group records by date
+  const dateMap = {};
+  allRecords.forEach(r => {
+    if (!dateMap[r.date]) dateMap[r.date] = [];
+    dateMap[r.date].push(r);
   });
-  const wb = document.getElementById('m-cleaned-by');
-  if (wb) wb.innerHTML = WORKERS.map(w => `<option value="${w}">${w}</option>`).join('');
-  const sb = document.getElementById('m-checked-by');
-  if (sb) sb.innerHTML = SUPERVISORS.map(s => `<option value="${s}">${s}</option>`).join('');
+
+  // Sorted dates newest first
+  const dates = Object.keys(dateMap).sort((a,b) => b.localeCompare(a));
+
+  if (!dates.length) {
+    el.innerHTML = '<div class="loading-msg" style="color:#94A3B8;text-align:center;padding:16px;font-size:12px;">No records</div>';
+    return;
+  }
+
+  let lastMonth = null;
+  let html = '';
+  dates.forEach(dateStr => {
+    const recs = dateMap[dateStr];
+    const monthLbl = recs[0].monthLabel;
+    const displayDate = recs[0].displayDate;
+    const dayName = recs[0].dayName;
+
+    if (monthLbl !== lastMonth) {
+      html += `<div class="sidebar-month-heading">${monthLbl}</div>`;
+      lastMonth = monthLbl;
+    }
+
+    const isActive = dateStr === selectedDate;
+    html += `
+      <div class="date-record-item ${isActive ? 'active' : ''}" onclick="selectDate('${dateStr}')">
+        <div class="dri-top">
+          <span class="dri-date">${displayDate}</span>
+          <span class="dri-day">${dayName}</span>
+          <span class="dri-count">${recs.length}</span>
+        </div>
+        <div class="dri-products">${esc(recs[0].previousProduct.split(' ').slice(0,2).join(' '))} → … → ${esc(recs[recs.length-1].nextProduct.split(' ').slice(0,2).join(' '))}</div>
+      </div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+// ── SELECT DATE → SHOW IN TABLE ───────────────────────────────────────────────
+window.selectDate = function(dateStr) {
+  selectedDate = dateStr;
+  renderSidebarDates(); // re-render to update active class
+
+  const dayRecs = allRecords.filter(r => r.date === dateStr)
+                             .sort((a,b) => (a.timeMin||0) - (b.timeMin||0));
+
+  // Update topbar meta
+  if (dayRecs.length) {
+    const r = dayRecs[0];
+    const topChecker = document.getElementById('topbar-checker');
+    if (topChecker) topChecker.textContent = r.checkedBy;
+    const topMeta = document.getElementById('topbar-meta');
+    if (topMeta) topMeta.textContent = `${r.displayDate} • ${dayRecs.length} Changeovers`;
+
+    // Update meta cards for the day
+    const el = (id,v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+    el('d-id', `${r.displayDate} (${r.dayName})`);
+    el('d-date', r.displayDate + ' ' + r.dayName);
+    el('d-time', `${dayRecs[0].time} – ${dayRecs[dayRecs.length-1].time}`);
+    el('d-cleaning', 'Yes — All');
+    el('d-cleaned-by', [...new Set(dayRecs.map(x=>x.cleanedBy))].join(', '));
+    el('d-checked-by', [...new Set(dayRecs.map(x=>x.checkedBy))].join(', '));
+  }
+
+  // Render table
+  const tbody = document.getElementById('pco-tbody');
+  if (!tbody) return;
+  if (!dayRecs.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:#94A3B8;font-size:13px;">No records for this date.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = dayRecs.map((r, i) => {
+    // Detect repeat: did this next product appear as any earlier "next" in today's list?
+    const isRepeat = dayRecs.slice(0, i).some(prev => prev.nextProduct === r.nextProduct);
+    return `
+    <tr class="pmr-row">
+      <td class="col-sr">${i+1}</td>
+      <td>
+        <div class="product-flow">
+          <span class="prod-pill prod-pill-prev" title="${esc(r.previousProduct)}">${esc(r.previousProduct)}</span>
+          <span class="prod-arrow">→</span>
+          <span class="prod-pill ${isRepeat ? 'prod-pill-repeat' : 'prod-pill-next'}" title="${esc(r.nextProduct)}">
+            ${isRepeat ? '↩&nbsp;' : ''}${esc(r.nextProduct)}
+          </span>
+        </div>
+      </td>
+      <td>
+        <span class="cleaning-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg>
+          Yes — All
+        </span>
+      </td>
+      <td><span class="time-chip">${esc(r.time)}</span></td>
+      <td><span class="worker-name">${esc(r.cleanedBy)}</span></td>
+      <td><span class="worker-name" style="color:#2563EB;">${esc(r.checkedBy)}</span></td>
+    </tr>`;
+  }).join('');
+};
+
+// ── SEARCH ────────────────────────────────────────────────────────────────────
+window.onSearchChange = function(v) {
+  searchQuery = v.toLowerCase();
+  const el = document.getElementById('record-list');
+  if (!searchQuery) { renderSidebarDates(); return; }
+
+  // Filter dates that have matching records
+  const dateMap = {};
+  allRecords.forEach(r => {
+    const matches = r.previousProduct?.toLowerCase().includes(searchQuery) ||
+                    r.nextProduct?.toLowerCase().includes(searchQuery) ||
+                    r.cleanedBy?.toLowerCase().includes(searchQuery) ||
+                    r.displayDate?.includes(searchQuery);
+    if (matches) {
+      if (!dateMap[r.date]) dateMap[r.date] = [];
+      dateMap[r.date].push(r);
+    }
+  });
+
+  const dates = Object.keys(dateMap).sort((a,b) => b.localeCompare(a));
+  if (!dates.length) { el.innerHTML = '<div class="loading-msg" style="text-align:center;padding:12px;color:#94A3B8;font-size:12px;">No results</div>'; return; }
+
+  let html = '';
+  dates.forEach(dateStr => {
+    const recs = dateMap[dateStr];
+    const isActive = dateStr === selectedDate;
+    html += `
+      <div class="date-record-item ${isActive ? 'active' : ''}" onclick="selectDate('${dateStr}')">
+        <div class="dri-top">
+          <span class="dri-date">${recs[0].displayDate}</span>
+          <span class="dri-day">${recs[0].dayName}</span>
+          <span class="dri-count">${recs.length}</span>
+        </div>
+        <div class="dri-products">${recs.length} matching records</div>
+      </div>`;
+  });
+  el.innerHTML = html;
+};
+
+// ── SIDEBAR / MOBILE ──────────────────────────────────────────────────────────
+window.toggleSidebar = function() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+};
+window.closeSidebar = function() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+};
+
+// ── ADD / EDIT MODAL ──────────────────────────────────────────────────────────
+function populateDropdowns() {
+  const g = id => document.getElementById(id);
+  if (g('m-prev')) g('m-prev').innerHTML = PRODUCTS.map(p => `<option>${esc(p)}</option>`).join('');
+  if (g('m-next')) g('m-next').innerHTML = PRODUCTS.map(p => `<option>${esc(p)}</option>`).join('');
+  if (g('m-cleaned-by')) g('m-cleaned-by').innerHTML = WORKERS.map(w => `<option>${esc(w)}</option>`).join('');
+  if (g('m-checked-by')) g('m-checked-by').innerHTML = SUPERVISORS.map(s => `<option>${esc(s)}</option>`).join('');
 }
 
 window.openAddModal = function() {
   editingId = null;
-  populateProductDropdowns();
-  const today = new Date().toISOString().split('T')[0];
-  const el = id => document.getElementById(id);
-  if (el('m-title')) el('m-title').textContent = 'Add New Changeover';
-  if (el('m-date')) el('m-date').value = today;
-  if (el('m-prev-product')) el('m-prev-product').selectedIndex = 0;
-  if (el('m-cleaning-done')) el('m-cleaning-done').value = 'Yes';
-  if (el('m-next-product')) el('m-next-product').selectedIndex = 1;
-  if (el('m-time')) el('m-time').value = '10:00 AM';
-  if (el('m-cleaned-by')) el('m-cleaned-by').selectedIndex = 0;
-  if (el('m-checked-by')) el('m-checked-by').selectedIndex = 0;
-  document.getElementById('entry-modal').style.display = 'flex';
+  populateDropdowns();
+  const g = id => document.getElementById(id);
+  if (g('modal-title')) g('modal-title').textContent = 'New Changeover Entry';
+  if (g('m-date')) g('m-date').value = new Date().toISOString().split('T')[0];
+  if (g('m-time')) g('m-time').value = '09:30 AM';
+  document.getElementById('modal-overlay').style.display = 'flex';
 };
 
 window.openEditModal = function(id) {
   const rec = allRecords.find(r => r.id === id);
   if (!rec) return;
   editingId = id;
-  populateProductDropdowns();
-  const el = i => document.getElementById(i);
-  if (el('m-title')) el('m-title').textContent = 'Edit Changeover';
-  if (el('m-date')) el('m-date').value = rec.date;
-  if (el('m-prev-product')) el('m-prev-product').value = rec.previousProduct;
-  if (el('m-cleaning-done')) el('m-cleaning-done').value = rec.cleaningDone;
-  if (el('m-next-product')) el('m-next-product').value = rec.nextProduct;
-  if (el('m-time')) el('m-time').value = rec.time;
-  if (el('m-cleaned-by')) el('m-cleaned-by').value = rec.cleanedBy;
-  if (el('m-checked-by')) el('m-checked-by').value = rec.checkedBy;
-  document.getElementById('entry-modal').style.display = 'flex';
+  populateDropdowns();
+  const g = i => document.getElementById(i);
+  if (g('modal-title')) g('modal-title').textContent = 'Edit Changeover Record';
+  if (g('m-date')) g('m-date').value = rec.date;
+  if (g('m-time')) g('m-time').value = rec.time;
+  if (g('m-prev')) g('m-prev').value = rec.previousProduct;
+  if (g('m-next')) g('m-next').value = rec.nextProduct;
+  if (g('m-cleaning')) g('m-cleaning').value = rec.cleaningDone;
+  if (g('m-cleaned-by')) g('m-cleaned-by').value = rec.cleanedBy;
+  if (g('m-checked-by')) g('m-checked-by').value = rec.checkedBy;
+  document.getElementById('modal-overlay').style.display = 'flex';
 };
 
 window.closeModal = function() {
-  document.getElementById('entry-modal').style.display = 'none';
+  document.getElementById('modal-overlay').style.display = 'none';
   editingId = null;
 };
 
 window.saveEntry = async function() {
-  const el = i => document.getElementById(i);
-  const dateVal = el('m-date')?.value;
-  if (!dateVal) { alert('Date is required'); return; }
+  const g = i => document.getElementById(i);
+  const dateVal = g('m-date')?.value;
+  if (!dateVal) { alert('Date required'); return; }
 
-  const fmt = formatDisplayDate(dateVal);
-  const id = editingId || `PCO-${dateVal}-${Date.now()}`;
+  const d = new Date(dateVal + 'T00:00:00');
+  const y = d.getFullYear();
+  const mo = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const dow = DAYS[d.getDay()];
+  const id = editingId || `PCO-${y}${mo}${dd}-M${Date.now().toString().slice(-4)}`;
+  const timeStr = g('m-time')?.value || '09:30 AM';
 
   const record = {
-    id,
-    date: dateVal,
-    displayDate: fmt.display,
-    dayName: fmt.day,
-    previousProduct: el('m-prev-product')?.value || '',
-    cleaningDone: el('m-cleaning-done')?.value || 'Yes',
-    nextProduct: el('m-next-product')?.value || '',
-    time: el('m-time')?.value || '10:00 AM',
-    cleanedBy: el('m-cleaned-by')?.value || '',
-    checkedBy: el('m-checked-by')?.value || '',
+    id, date: dateVal,
+    displayDate: `${dd}/${mo}/${y}`, dayName: dow,
+    monthLabel: fmtMonthLabel(dateVal),
+    previousProduct: g('m-prev')?.value || '',
+    cleaningDone: g('m-cleaning')?.value || 'Yes',
+    nextProduct: g('m-next')?.value || '',
+    time: timeStr, timeMin: 0,
+    cleanedBy: g('m-cleaned-by')?.value || '',
+    checkedBy: g('m-checked-by')?.value || '',
     isGenerated: false
   };
 
-  if (editingId) {
-    const idx = allRecords.findIndex(r => r.id === editingId);
-    if (idx !== -1) allRecords[idx] = record;
-  } else {
-    allRecords.unshift(record);
-    allRecords.sort((a,b) => b.date.localeCompare(a.date));
+  // Save to cloud
+  await saveEntryToCloud(record);
+  cloudOverrides[record.id] = record;
+
+  // Update local records
+  const idx = allRecords.findIndex(r => r.id === record.id);
+  if (idx !== -1) allRecords[idx] = record;
+  else {
+    allRecords.push(record);
+    allRecords.sort((a,b) => b.date.localeCompare(a.date) || (b.timeMin||0) - (a.timeMin||0));
   }
 
-  await saveRecord(record);
   closeModal();
-  applyFilter();
-  updateKPIs();
-  selectRecord(id);
+  renderSidebarStats();
+  renderSidebarDates();
+  selectDate(dateVal);
+};
+
+// ── EDIT CURRENT RECORD ───────────────────────────────────────────────────────
+window.editCurrentRecord = function() {
+  if (selectedDate) {
+    const dayRecs = allRecords.filter(r => r.date === selectedDate);
+    if (dayRecs.length) openEditModal(dayRecs[0].id);
+  }
 };
 
 // ── EXCEL EXPORT ──────────────────────────────────────────────────────────────
-window.exportToExcel = function() {
-  const prefix = MONTH_MAP[activeMonth] || '2026-10';
-  const rows = allRecords.filter(r => r.date.startsWith(prefix));
-  if (!rows.length) { alert('No records to export for ' + activeMonth); return; }
+window.exportExcel = function() {
+  // Export selected day or all records
+  const rows = selectedDate
+    ? allRecords.filter(r => r.date === selectedDate).sort((a,b) => (a.timeMin||0)-(b.timeMin||0))
+    : allRecords.slice(0,500); // cap at 500 for performance
 
-  const headers = ['Date', 'Day', 'Previous Product', 'Cleaning Done', 'Next Product', 'Time', 'Cleaned By', 'Checked By'];
+  if (!rows.length) { alert('No records to export'); return; }
+
+  const headers = ['Sr.No','Date','Day','Previous Product','Cleaning Done','Next Product','Time','Cleaned By','Checked By'];
+  let sr = 1;
   const data = [headers, ...rows.map(r => [
-    r.displayDate, r.dayName, r.previousProduct, r.cleaningDone,
-    r.nextProduct, r.time, r.cleanedBy, r.checkedBy
+    sr++, r.displayDate, r.dayName,
+    r.previousProduct, r.cleaningDone, r.nextProduct,
+    r.time, r.cleanedBy, r.checkedBy
   ])];
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [12,6,22,14,22,12,18,18].map(w => ({ wch: w }));
+  ws['!cols'] = [6,11,6,30,14,30,11,16,16].map(w=>({wch:w}));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, `PCO ${activeMonth} 2026`);
-  XLSX.writeFile(wb, `LV_Spices_Product_Changeover_${activeMonth}_2026.xlsx`);
+  const sheetName = selectedDate ? `PCO_${selectedDate}` : 'PCO_All';
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `LV_Spices_ProductChangeover_${selectedDate || 'All'}.xlsx`);
 };
 
-// ── PRINT ─────────────────────────────────────────────────────────────────────
-window.printLog = function() { window.print(); };
-
-// ── CLOSE MODAL ON BACKDROP ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('entry-modal')?.addEventListener('click', e => {
-    if (e.target.id === 'entry-modal') closeModal();
+  document.getElementById('modal-overlay')?.addEventListener('click', e => {
+    if (e.target.id === 'modal-overlay') closeModal();
   });
   init();
 });
