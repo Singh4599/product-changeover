@@ -280,14 +280,14 @@ window.selectDate = function(dateStr) {
     <tr class="pmr-row">
       <td class="col-sr">${i+1}</td>
       <td style="font-size:12px;font-weight:600;color:#64748B;">${esc(r.displayDate)}</td>
-      <td><span class="prod-pill prod-pill-prev" title="${esc(r.previousProduct)}">${esc(r.previousProduct)}</span></td>
+      <td style="font-weight:600;color:#1E293B;">${esc(r.previousProduct)}</td>
       <td style="text-align:center;">
         <span class="cleaning-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg>
           Yes
         </span>
       </td>
-      <td><span class="prod-pill prod-pill-next" title="${esc(r.nextProduct)}">${esc(r.nextProduct)}</span></td>
+      <td style="font-weight:600;color:#059669;">${esc(r.nextProduct)}</td>
       <td><span class="time-chip">${esc(r.time)}</span></td>
       <td><span class="worker-name">${esc(r.cleanedBy)}</span></td>
       <td><span class="worker-name" style="color:#2563EB;">${esc(r.checkedBy)}</span></td>
