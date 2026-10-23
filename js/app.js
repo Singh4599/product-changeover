@@ -37,7 +37,7 @@ const PRODUCTS = [
   'Chilli Powder SP Line'
 ];
 
-const WORKERS     = ['BHIMLAL SHARMA','Mukesh Vora','Vinod Singh','SHIVSHANKAR YADAV','Mahesh','Rajkumar','SANVALDAS','Suraj','Suchitra','Anil'];
+const WORKERS     = ['Mukesh Vora','Vinod Singh','SHIVSHANKAR YADAV','Mahesh','Rajkumar','SANVALDAS','Suraj','Suchitra','Anil'];
 const SUPERVISORS = ['BHIMLAL SHARMA','Vishal Chaturvedi'];
 const DAYS        = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
@@ -94,37 +94,23 @@ function generateAllRecords() {
       const seed = (cur.getTime() / 86400000) | 0;
       const rng  = seedRng(seed);
 
-      // Pick 15-18 products for today (realistic: some may repeat, some appear twice)
+      // Shuffle products for today — simple sequential, no repeats
       const count = 15 + Math.floor(rng() * 4); // 15-18
 
-      // Shuffle the full product list
-      const shuffled = [...PRODUCTS];
-      for (let i = shuffled.length - 1; i > 0; i--) {
+      const pool = [...PRODUCTS];
+      for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i+1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-
-      // Build a day's product sequence: pick 'count' from shuffled list,
-      // but ~20% chance a product is repeated (produced again later that day)
-      const daySeq = [];
-      for (let i = 0; i < count; i++) {
-        // ~20% chance: pick a random earlier product again (realistic repeat)
-        if (i > 3 && daySeq.length > 2 && rng() < 0.20) {
-          const repeatIdx = Math.floor(rng() * Math.max(1, daySeq.length - 1));
-          daySeq.push(daySeq[repeatIdx]);
-        } else {
-          daySeq.push(shuffled[i % shuffled.length]);
-        }
+        [pool[i], pool[j]] = [pool[j], pool[i]];
       }
 
       // Start 9:30 AM = 570 min; end target ~5:30 PM = 1050 min
       let timeMin = 570; // 9:30 AM
 
       for (let i = 0; i < count; i++) {
-        if (timeMin > 1050) break; // don't go past 5:30 PM
+        if (timeMin > 1050) break;
 
-        const prevProduct = daySeq[i];
-        const nextProduct = daySeq[i + 1] || shuffled[0];
+        const prevProduct = pool[i % pool.length];
+        const nextProduct = pool[(i + 1) % pool.length];
         const worker    = WORKERS[Math.floor(rng() * WORKERS.length)];
         const supervisor = SUPERVISORS[Math.floor(rng() * SUPERVISORS.length)];
         const id = `PCO-${y}${mo}${d}-${String(globalIdx).padStart(4,'0')}`;
@@ -291,8 +277,6 @@ window.selectDate = function(dateStr) {
   }
 
   tbody.innerHTML = dayRecs.map((r, i) => {
-    // Detect repeat: did this next product appear as any earlier "next" in today's list?
-    const isRepeat = dayRecs.slice(0, i).some(prev => prev.nextProduct === r.nextProduct);
     return `
     <tr class="pmr-row">
       <td class="col-sr">${i+1}</td>
@@ -300,9 +284,7 @@ window.selectDate = function(dateStr) {
         <div class="product-flow">
           <span class="prod-pill prod-pill-prev" title="${esc(r.previousProduct)}">${esc(r.previousProduct)}</span>
           <span class="prod-arrow">→</span>
-          <span class="prod-pill ${isRepeat ? 'prod-pill-repeat' : 'prod-pill-next'}" title="${esc(r.nextProduct)}">
-            ${isRepeat ? '↩&nbsp;' : ''}${esc(r.nextProduct)}
-          </span>
+          <span class="prod-pill prod-pill-next" title="${esc(r.nextProduct)}">${esc(r.nextProduct)}</span>
         </div>
       </td>
       <td>
