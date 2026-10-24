@@ -547,6 +547,27 @@ body {
   color: #111827;
 }
 
+.btn-topbar-print {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+  border-radius: 11px !important;
+  padding: 9px 15px !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  font-family: var(--font-family);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+}
+.btn-topbar-print:hover {
+  background: #DBEAFE;
+  border-color: #93C5FD;
+  transform: translateY(-1px);
+}
+
 /* Unit 11 / Unit 12 Toggle */
 .unit-toggle-wrap {
   display: inline-flex;

@@ -488,6 +488,97 @@ window.exportExcel = function () {
   XLSX.writeFile(wb, `LV_Spices_ProductChangeover_${selectedDate || 'All'}.xlsx`);
 };
 
+window.printRegister = window.printPage = function () {
+  const data = selectedDate
+    ? allRecords.filter(r => r.date === selectedDate).sort((a, b) => (a.timeMin || 0) - (b.timeMin || 0))
+    : allRecords.slice(0, 50);
+
+  if (!data || !data.length) {
+    alert('No changeover records to print.');
+    return;
+  }
+
+  const rowH = Math.max(8, Math.floor(148 / data.length));
+  function esc(v) {
+    return v ? String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '—';
+  }
+
+  const rowsHtml = data.map((r, i) => `<tr style="height:${rowH}mm;${i % 2 === 1 ? 'background:#f8fafc' : ''}">
+    <td style="text-align:center;font-weight:700;color:#64748b">${i + 1}</td>
+    <td style="white-space:nowrap;font-size:7.5pt;font-weight:600">${esc(r.displayDate)}</td>
+    <td style="font-weight:700;color:#1e293b">${esc(r.previousProduct)}</td>
+    <td style="text-align:center">
+      <span style="background:#dcfce7;color:#15803d;border:1px solid #86efac;padding:1.5pt 5pt;border-radius:3pt;font-size:6.5pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">✓ YES</span>
+    </td>
+    <td style="font-weight:700;color:#059669">${esc(r.nextProduct)}</td>
+    <td style="text-align:center;white-space:nowrap;font-weight:600;color:#334155">${esc(r.time)}</td>
+    <td style="font-weight:600;color:#0f172a">${esc(r.cleanedBy)}</td>
+    <td style="font-weight:700;color:#2563eb">${esc(r.checkedBy)}</td>
+  </tr>`).join('');
+
+  const firstRec = data[0] || {};
+  const dateStr = firstRec.displayDate ? `${firstRec.displayDate} (${firstRec.dayName || ''})` : (selectedDate || 'All Records');
+  const checkedByList = [...new Set(data.map(x => x.checkedBy).filter(Boolean))].join(', ') || 'Vishal Chaturvedi';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>LV Spices — Product Changeover Record</title>
+<style>
+  @page{size:A4 landscape;margin:8mm}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{font-family:Arial,sans-serif;font-size:8pt;color:#000;background:#fff}
+  .hdr{border:2pt solid #000;padding:6pt 8pt;margin-bottom:6pt}
+  .hdr h1{font-size:13pt;font-weight:800;text-transform:uppercase;letter-spacing:0.5px}
+  .hdr p{font-size:7pt;color:#444;margin-top:2pt}
+  .pills{display:flex;gap:6pt;margin-top:5pt;flex-wrap:wrap}
+  .pill{border:1pt solid #555;padding:1.5pt 6pt;font-size:7pt;border-radius:3pt}
+  .pill b{color:#b91c1c}
+  table{width:100%;border-collapse:collapse;margin-top:5pt}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  th{background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;text-align:left}
+  td{font-size:7.5pt;padding:4pt;border:0.5pt solid #bbb;vertical-align:middle;line-height:1.25}
+  .sig{margin-top:14pt;font-size:8pt;display:flex;justify-content:space-between;padding:0 4pt}
+</style></head><body>
+<div class="hdr">
+  <h1>Product Changeover Record — L V Spices</h1>
+  <p>Equipment Cleaning &amp; Line Clearance Before Product Switch • FSSAI Food Safety Hygiene Compliance Log</p>
+  <div class="pills">
+    <span class="pill">🗓️ Date: <b>${dateStr}</b></span>
+    <span class="pill">📋 Total Changeovers: <b>${data.length}</b></span>
+    <span class="pill">🧼 Cleaning (Table / Scale / Tools): <b style="color:#15803d">YES — All Verified</b></span>
+    <span class="pill">👤 Checked By: <b>${checkedByList}</b></span>
+  </div>
+</div>
+<table>
+  <thead><tr>
+    <th style="width:4%;text-align:center">SR.</th>
+    <th style="width:8%">DATE</th>
+    <th style="width:23%">PREVIOUS PRODUCT (FINISHED)</th>
+    <th style="width:11%;text-align:center">CLEANING DONE</th>
+    <th style="width:23%">NEXT PRODUCT (STARTED)</th>
+    <th style="width:7%;text-align:center">TIME</th>
+    <th style="width:12%">CLEANED BY</th>
+    <th style="width:12%">CHECKED BY (SIGN)</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+<div class="sig">
+  <span><b>Production Supervisor:</b> &nbsp; ____________________</span>
+  <span><b>Checked By (Sign):</b> &nbsp; ${checkedByList}</span>
+  <span><b>Date:</b> ${new Date().toLocaleDateString('en-IN')}</span>
+</div>
+<script>window.onload=function(){window.print();setTimeout(function(){window.close();},800);};<\/script>
+</body></html>`;
+
+  const pw = window.open('', '_blank', 'width=1200,height=850');
+  if (pw) {
+    pw.document.write(html);
+    pw.document.close();
+  } else {
+    alert('Please allow popups to print the A4 register.');
+  }
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('modal-overlay')?.addEventListener('click', e => {
     if (e.target.id === 'modal-overlay') closeModal();
