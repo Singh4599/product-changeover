@@ -37,38 +37,38 @@ const PRODUCTS = [
   'Chilli Powder SP Line'
 ];
 
-const WORKERS     = ['Mukesh Vora','Vinod Singh','Shiveshankar Yadav','Mahesh','Rajkumar','Sanvaldas','Suraj','Suchitra','Anil'];
-const SUPERVISORS = ['Bhimlal Sharma','Vishal Chaturvedi'];
-const DAYS        = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const WORKERS = ['Mukesh Vora', 'Vinod Singh', 'Shiveshankar Yadav', 'Mahesh', 'Rajkumar', 'Sanvaldas', 'Suraj', 'Suchitra', 'Anil'];
+const SUPERVISORS = ['Bhimlal Sharma', 'Vishal Chaturvedi'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-let allRecords   = [];  // all generated + cloud records
+let allRecords = [];  // all generated + cloud records
 let cloudOverrides = {}; // user-edited records from Firebase
 let selectedDate = null; // currently selected date in sidebar
-let searchQuery  = '';
-let editingId    = null;
+let searchQuery = '';
+let editingId = null;
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function seedRng(seed) {
   let s = (seed | 0) + 1;
-  return () => { s=(s*1664525+1013904223)&0xffffffff; return (s>>>0)/0xffffffff; };
+  return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
 }
-function esc(s)  { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+function esc(s) { return s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''; }
 function fmtDate(ds) {
   if (!ds) return '';
   const d = new Date(ds + 'T00:00:00');
-  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 function fmtMonthLabel(ds) {
   const d = new Date(ds + 'T00:00:00');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 function minutesToTime(m) {
-  const h = Math.floor(m/60);
+  const h = Math.floor(m / 60);
   const mn = m % 60;
   const ampm = h < 12 ? 'AM' : 'PM';
-  return `${(h % 12) || 12}:${String(mn).padStart(2,'0')} ${ampm}`;
+  return `${(h % 12) || 12}:${String(mn).padStart(2, '0')} ${ampm}`;
 }
 
 // ── LIFETIME DATA GENERATION ──────────────────────────────────────────────────
@@ -77,29 +77,29 @@ function generateAllRecords() {
   const records = [];
   const start = new Date('2026-04-01T00:00:00');
   const today = new Date();
-  today.setHours(23,59,59,999);
+  today.setHours(23, 59, 59, 999);
   let cur = new Date(start);
   let globalIdx = 1;
 
   while (cur <= today) {
     const dow = cur.getDay();
     if (dow !== 0) { // skip Sunday
-      const y  = cur.getFullYear();
-      const mo = String(cur.getMonth()+1).padStart(2,'0');
-      const d  = String(cur.getDate()).padStart(2,'0');
+      const y = cur.getFullYear();
+      const mo = String(cur.getMonth() + 1).padStart(2, '0');
+      const d = String(cur.getDate()).padStart(2, '0');
       const dateStr = `${y}-${mo}-${d}`;
       const dayName = DAYS[dow];
 
       // Seeded RNG per day (using integer day offset from epoch)
       const seed = (cur.getTime() / 86400000) | 0;
-      const rng  = seedRng(seed);
+      const rng = seedRng(seed);
 
       // Shuffle products for today — simple sequential, no repeats
       const count = 15 + Math.floor(rng() * 4); // 15-18
 
       const pool = [...PRODUCTS];
       for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i+1));
+        const j = Math.floor(rng() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
 
@@ -111,9 +111,9 @@ function generateAllRecords() {
 
         const prevProduct = pool[i % pool.length];
         const nextProduct = pool[(i + 1) % pool.length];
-        const worker    = WORKERS[Math.floor(rng() * WORKERS.length)];
+        const worker = WORKERS[Math.floor(rng() * WORKERS.length)];
         const supervisor = SUPERVISORS[Math.floor(rng() * SUPERVISORS.length)];
-        const id = `PCO-${y}${mo}${d}-${String(globalIdx).padStart(4,'0')}`;
+        const id = `PCO-${y}${mo}${d}-${String(globalIdx).padStart(4, '0')}`;
 
         records.push({
           id,
@@ -145,14 +145,14 @@ function generateAllRecords() {
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
-  updateSidebarStats({ total:0, today:0, workers:0 });
+  updateSidebarStats({ total: 0, today: 0, workers: 0 });
   document.getElementById('record-list').innerHTML = '<div class="loading-msg">Generating records…</div>';
 
   // Load cloud overrides (only user-edited/added records)
   try {
     const cloud = await loadAllEntriesFromCloud();
     cloud.forEach(r => { cloudOverrides[r.id] = r; });
-  } catch(e) { updateCloudBadge(false); }
+  } catch (e) { updateCloudBadge(false); }
 
   // Generate all records (blocking but fast ~5ms)
   const generated = generateAllRecords();
@@ -167,7 +167,7 @@ async function init() {
   });
 
   // Sort: newest date first, then by time within date
-  allRecords.sort((a,b) => b.date.localeCompare(a.date) || (b.timeMin||0) - (a.timeMin||0));
+  allRecords.sort((a, b) => b.date.localeCompare(a.date) || (b.timeMin || 0) - (a.timeMin || 0));
 
   renderSidebarStats();
   renderSidebarDates();
@@ -188,7 +188,7 @@ function renderSidebarStats() {
 }
 
 function updateSidebarStats({ total, today, workers }) {
-  const el = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+  const el = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   el('stat-total', total || '—');
   el('stat-cleaned', today || '—');
   el('stat-workers', workers || '—');
@@ -207,7 +207,7 @@ function renderSidebarDates() {
   });
 
   // Sorted dates newest first
-  const dates = Object.keys(dateMap).sort((a,b) => b.localeCompare(a));
+  const dates = Object.keys(dateMap).sort((a, b) => b.localeCompare(a));
 
   if (!dates.length) {
     el.innerHTML = '<div class="loading-msg" style="color:#94A3B8;text-align:center;padding:16px;font-size:12px;">No records</div>';
@@ -235,7 +235,7 @@ function renderSidebarDates() {
           <span class="dri-day">${dayName}</span>
           <span class="dri-count">${recs.length}</span>
         </div>
-        <div class="dri-products">${esc(recs[0].previousProduct.split(' ').slice(0,2).join(' '))} → … → ${esc(recs[recs.length-1].nextProduct.split(' ').slice(0,2).join(' '))}</div>
+        <div class="dri-products">${esc(recs[0].previousProduct.split(' ').slice(0, 2).join(' '))} → … → ${esc(recs[recs.length - 1].nextProduct.split(' ').slice(0, 2).join(' '))}</div>
       </div>`;
   });
 
@@ -243,12 +243,12 @@ function renderSidebarDates() {
 }
 
 // ── SELECT DATE → SHOW IN TABLE ───────────────────────────────────────────────
-window.selectDate = function(dateStr) {
+window.selectDate = function (dateStr) {
   selectedDate = dateStr;
   renderSidebarDates(); // re-render to update active class
 
   const dayRecs = allRecords.filter(r => r.date === dateStr)
-                             .sort((a,b) => (a.timeMin||0) - (b.timeMin||0));
+    .sort((a, b) => (a.timeMin || 0) - (b.timeMin || 0));
 
   // Update topbar meta
   if (dayRecs.length) {
@@ -259,13 +259,13 @@ window.selectDate = function(dateStr) {
     if (topMeta) topMeta.textContent = `${r.displayDate} • ${dayRecs.length} Changeovers`;
 
     // Update meta cards for the day
-    const el = (id,v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+    const el = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     el('d-id', `${r.displayDate} (${r.dayName})`);
     el('d-date', r.displayDate + ' ' + r.dayName);
-    el('d-time', `${dayRecs[0].time} – ${dayRecs[dayRecs.length-1].time}`);
+    el('d-time', `${dayRecs[0].time} – ${dayRecs[dayRecs.length - 1].time}`);
     el('d-cleaning', 'Yes — All');
-    el('d-cleaned-by', [...new Set(dayRecs.map(x=>x.cleanedBy))].join(', '));
-    el('d-checked-by', [...new Set(dayRecs.map(x=>x.checkedBy))].join(', '));
+    el('d-cleaned-by', [...new Set(dayRecs.map(x => x.cleanedBy))].join(', '));
+    el('d-checked-by', [...new Set(dayRecs.map(x => x.checkedBy))].join(', '));
   }
 
   // Render table
@@ -278,7 +278,7 @@ window.selectDate = function(dateStr) {
 
   tbody.innerHTML = dayRecs.map((r, i) => `
     <tr class="pmr-row">
-      <td class="col-sr">${i+1}</td>
+      <td class="col-sr">${i + 1}</td>
       <td style="font-size:12px;font-weight:600;color:#64748B;">${esc(r.displayDate)}</td>
       <td style="font-weight:600;color:#1E293B;">${esc(r.previousProduct)}</td>
       <td style="text-align:center;">
@@ -305,7 +305,7 @@ window.selectDate = function(dateStr) {
 
 
 // ── SEARCH ────────────────────────────────────────────────────────────────────
-window.onSearchChange = function(v) {
+window.onSearchChange = function (v) {
   searchQuery = v.toLowerCase();
   const el = document.getElementById('record-list');
   if (!searchQuery) { renderSidebarDates(); return; }
@@ -314,16 +314,16 @@ window.onSearchChange = function(v) {
   const dateMap = {};
   allRecords.forEach(r => {
     const matches = r.previousProduct?.toLowerCase().includes(searchQuery) ||
-                    r.nextProduct?.toLowerCase().includes(searchQuery) ||
-                    r.cleanedBy?.toLowerCase().includes(searchQuery) ||
-                    r.displayDate?.includes(searchQuery);
+      r.nextProduct?.toLowerCase().includes(searchQuery) ||
+      r.cleanedBy?.toLowerCase().includes(searchQuery) ||
+      r.displayDate?.includes(searchQuery);
     if (matches) {
       if (!dateMap[r.date]) dateMap[r.date] = [];
       dateMap[r.date].push(r);
     }
   });
 
-  const dates = Object.keys(dateMap).sort((a,b) => b.localeCompare(a));
+  const dates = Object.keys(dateMap).sort((a, b) => b.localeCompare(a));
   if (!dates.length) { el.innerHTML = '<div class="loading-msg" style="text-align:center;padding:12px;color:#94A3B8;font-size:12px;">No results</div>'; return; }
 
   let html = '';
@@ -344,11 +344,11 @@ window.onSearchChange = function(v) {
 };
 
 // ── SIDEBAR / MOBILE ──────────────────────────────────────────────────────────
-window.toggleSidebar = function() {
+window.toggleSidebar = function () {
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('overlay').classList.toggle('show');
 };
-window.closeSidebar = function() {
+window.closeSidebar = function () {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('overlay').classList.remove('show');
 };
@@ -362,7 +362,7 @@ function populateDropdowns() {
   if (g('m-checked-by')) g('m-checked-by').innerHTML = SUPERVISORS.map(s => `<option>${esc(s)}</option>`).join('');
 }
 
-window.openAddModal = function() {
+window.openAddModal = function () {
   editingId = null;
   populateDropdowns();
   const g = id => document.getElementById(id);
@@ -372,7 +372,7 @@ window.openAddModal = function() {
   document.getElementById('modal-overlay').style.display = 'flex';
 };
 // ── DELETE RECORD ─────────────────────────────────────────────────────────────
-window.deleteRecord = function(id) {
+window.deleteRecord = function (id) {
   const rec = allRecords.find(r => r.id === id);
   if (!rec) return;
   const label = `${rec.displayDate} — ${rec.previousProduct} → ${rec.nextProduct}`;
@@ -388,7 +388,7 @@ window.deleteRecord = function(id) {
   renderSidebarDates();
 };
 
-window.openEditModal = function(id) {
+window.openEditModal = function (id) {
 
   const rec = allRecords.find(r => r.id === id);
   if (!rec) return;
@@ -406,20 +406,20 @@ window.openEditModal = function(id) {
   document.getElementById('modal-overlay').style.display = 'flex';
 };
 
-window.closeModal = function() {
+window.closeModal = function () {
   document.getElementById('modal-overlay').style.display = 'none';
   editingId = null;
 };
 
-window.saveEntry = async function() {
+window.saveEntry = async function () {
   const g = i => document.getElementById(i);
   const dateVal = g('m-date')?.value;
   if (!dateVal) { alert('Date required'); return; }
 
   const d = new Date(dateVal + 'T00:00:00');
   const y = d.getFullYear();
-  const mo = String(d.getMonth()+1).padStart(2,'0');
-  const dd = String(d.getDate()).padStart(2,'0');
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
   const dow = DAYS[d.getDay()];
   const id = editingId || `PCO-${y}${mo}${dd}-M${Date.now().toString().slice(-4)}`;
   const timeStr = g('m-time')?.value || '09:30 AM';
@@ -446,7 +446,7 @@ window.saveEntry = async function() {
   if (idx !== -1) allRecords[idx] = record;
   else {
     allRecords.push(record);
-    allRecords.sort((a,b) => b.date.localeCompare(a.date) || (b.timeMin||0) - (a.timeMin||0));
+    allRecords.sort((a, b) => b.date.localeCompare(a.date) || (b.timeMin || 0) - (a.timeMin || 0));
   }
 
   closeModal();
@@ -456,7 +456,7 @@ window.saveEntry = async function() {
 };
 
 // ── EDIT CURRENT RECORD ───────────────────────────────────────────────────────
-window.editCurrentRecord = function() {
+window.editCurrentRecord = function () {
   if (selectedDate) {
     const dayRecs = allRecords.filter(r => r.date === selectedDate);
     if (dayRecs.length) openEditModal(dayRecs[0].id);
@@ -464,15 +464,15 @@ window.editCurrentRecord = function() {
 };
 
 // ── EXCEL EXPORT ──────────────────────────────────────────────────────────────
-window.exportExcel = function() {
+window.exportExcel = function () {
   // Export selected day or all records
   const rows = selectedDate
-    ? allRecords.filter(r => r.date === selectedDate).sort((a,b) => (a.timeMin||0)-(b.timeMin||0))
-    : allRecords.slice(0,500); // cap at 500 for performance
+    ? allRecords.filter(r => r.date === selectedDate).sort((a, b) => (a.timeMin || 0) - (b.timeMin || 0))
+    : allRecords.slice(0, 500); // cap at 500 for performance
 
   if (!rows.length) { alert('No records to export'); return; }
 
-  const headers = ['Sr.No','Date','Day','Previous Product','Cleaning Done','Next Product','Time','Cleaned By','Checked By'];
+  const headers = ['Sr.No', 'Date', 'Day', 'Previous Product', 'Cleaning Done', 'Next Product', 'Time', 'Cleaned By', 'Checked By'];
   let sr = 1;
   const data = [headers, ...rows.map(r => [
     sr++, r.displayDate, r.dayName,
@@ -481,7 +481,7 @@ window.exportExcel = function() {
   ])];
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [6,11,6,30,14,30,11,16,16].map(w=>({wch:w}));
+  ws['!cols'] = [6, 11, 6, 30, 14, 30, 11, 16, 16].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new();
   const sheetName = selectedDate ? `PCO_${selectedDate}` : 'PCO_All';
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
