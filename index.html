@@ -161,7 +161,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           + New Record
         </button>
-        <button class="btn-topbar-print" onclick="printRegister()">
+        <button class="btn-topbar-print" onclick="openPrintModal()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="6 9 6 2 18 2 18 9"></polyline>
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
@@ -267,6 +267,74 @@
     </div>
   </div>
 </div>
+
+<!-- PRINT A4 RANGE MODAL -->
+<div id="print-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;" onclick="closePrintModal()">
+  <div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;max-width:460px;width:100%;box-shadow:0 25px 50px rgba(0,0,0,0.25);border:1px solid #e2e8f0;overflow:hidden;animation:slideUp 0.25s ease-out;">
+    <div style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" stroke-width="2" width="22" height="22"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span style="font-size:16px;font-weight:800;color:#0f172a;">Print A4 — Select Date Range</span>
+      </div>
+      <button onclick="closePrintModal()" style="background:none;border:none;font-size:18px;color:#64748b;cursor:pointer;">&#x2715;</button>
+    </div>
+    <div style="padding:20px 24px;">
+      <p style="color:#64748b;font-size:13px;margin:0 0 16px;">Select a date, range, or full month to print — one A4 page per day.</p>
+      <div style="display:flex;gap:8px;margin-bottom:18px;">
+        <button id="pm-tab-single" onclick="setPrintTab('single')" style="flex:1;padding:8px 4px;border-radius:8px;border:2px solid #1a1a2e;background:#1a1a2e;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">Today's Date</button>
+        <button id="pm-tab-range" onclick="setPrintTab('range')" style="flex:1;padding:8px 4px;border-radius:8px;border:2px solid #e2e8f0;background:#fff;color:#555;font-weight:600;font-size:13px;cursor:pointer;">Date Range</button>
+        <button id="pm-tab-month" onclick="setPrintTab('month')" style="flex:1;padding:8px 4px;border-radius:8px;border:2px solid #e2e8f0;background:#fff;color:#555;font-weight:600;font-size:13px;cursor:pointer;">Full Month</button>
+      </div>
+      <div id="pm-panel-single">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+          <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Selected Date</div>
+          <div id="pm-single-date-label" style="font-size:18px;font-weight:800;color:#0f172a;">—</div>
+        </div>
+      </div>
+      <div id="pm-panel-range" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">From Date</label>
+            <input type="date" id="pm-from-date" style="width:100%;height:38px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;box-sizing:border-box;"/>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">To Date</label>
+            <input type="date" id="pm-to-date" style="width:100%;height:38px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;box-sizing:border-box;"/>
+          </div>
+        </div>
+        <div id="pm-range-info" style="margin-top:10px;font-size:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 12px;display:none;"></div>
+      </div>
+      <div id="pm-panel-month" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Month</label>
+            <select id="pm-month-sel" onchange="updateMonthPreview()" style="width:100%;height:38px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;">
+              <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+              <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+              <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+              <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Year</label>
+            <select id="pm-year-sel" onchange="updateMonthPreview()" style="width:100%;height:38px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;">
+              <option value="2025">2025</option><option value="2026" selected>2026</option>
+            </select>
+          </div>
+        </div>
+        <div id="pm-month-info" style="margin-top:10px;font-size:12px;background:#f0fdf4;border:1px solid #a7f3d0;border-radius:8px;padding:9px 12px;"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button onclick="closePrintModal()" style="flex:1;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;font-size:14px;cursor:pointer;font-weight:600;">Cancel</button>
+        <button onclick="executePrint()" style="flex:2;background:#1a1a2e;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print Now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<style>@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}</style>
 
 <script type="module" src="js/app.js"></script>
 </body>

@@ -585,3 +585,177 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   init();
 });
+
+// ─── PRINT A4 RANGE MODAL ────────────────────────────────────────────────────
+let _printTab = 'single';
+
+function _todayStr() { return new Date().toISOString().split('T')[0]; }
+
+window.openPrintModal = function() {
+  const modal = document.getElementById('print-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  _printTab = 'single';
+  setPrintTab('single');
+  const today = _todayStr();
+  const [y,m,d] = today.split('-');
+  const lbl = document.getElementById('pm-single-date-label');
+  if (lbl) lbl.textContent = `${d}/${m}/${y}`;
+  const fromEl = document.getElementById('pm-from-date');
+  const toEl   = document.getElementById('pm-to-date');
+  if (fromEl) { fromEl.max = today; fromEl.value = today; }
+  if (toEl)   { toEl.max   = today; toEl.value   = today; }
+  const todayParts = today.split('-');
+  const mSel = document.getElementById('pm-month-sel');
+  const ySel = document.getElementById('pm-year-sel');
+  if (mSel) mSel.value = todayParts[1];
+  if (ySel) ySel.value = todayParts[0];
+  window.updateMonthPreview();
+  _coRangeInfo();
+};
+
+window.closePrintModal = function() {
+  const m = document.getElementById('print-modal');
+  if (m) m.style.display = 'none';
+};
+
+window.setPrintTab = function(tab) {
+  _printTab = tab;
+  ['single','range','month'].forEach(t => {
+    const btn   = document.getElementById(`pm-tab-${t}`);
+    const panel = document.getElementById(`pm-panel-${t}`);
+    const active = t === tab;
+    if (btn)   { btn.style.background = active ? '#1a1a2e' : '#fff'; btn.style.color = active ? '#fff' : '#555'; btn.style.borderColor = active ? '#1a1a2e' : '#e2e8f0'; }
+    if (panel) panel.style.display = active ? '' : 'none';
+  });
+};
+
+function _coRangeInfo() {
+  const info = document.getElementById('pm-range-info');
+  const from = document.getElementById('pm-from-date');
+  const to   = document.getElementById('pm-to-date');
+  if (!info || !from || !to) return;
+  const today = _todayStr();
+  if (from.value > today) from.value = today;
+  if (to.value > today)   to.value   = today;
+  if (from.value && to.value && from.value <= to.value) {
+    const days = Math.round((new Date(to.value) - new Date(from.value)) / 86400000) + 1;
+    info.style.display = '';
+    info.style.color = '#374151';
+    info.textContent = `\uD83D\uDCC4 ${days} page${days > 1 ? 's' : ''} will be printed (one per day).${days > 31 ? ' \u26A0\uFE0F Large range.' : ''}`;
+  } else if (from.value && to.value && from.value > to.value) {
+    info.style.display = '';
+    info.style.color = '#dc2626';
+    info.textContent = '\u26A0\uFE0F "From" date must be before "To" date.';
+  } else { info.style.display = 'none'; }
+}
+
+window.updateMonthPreview = function() {
+  const mSel = document.getElementById('pm-month-sel');
+  const ySel = document.getElementById('pm-year-sel');
+  const info = document.getElementById('pm-month-info');
+  if (!mSel || !ySel || !info) return;
+  const mo = mSel.value; const y = ySel.value;
+  const today = _todayStr();
+  const [todayY, todayM] = today.split('-');
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  if (y > todayY || (y === todayY && mo > todayM)) {
+    info.style.background = '#fef2f2'; info.style.borderColor = '#fecaca'; info.style.color = '#dc2626';
+    info.textContent = `\u26D4 ${monthNames[parseInt(mo)-1]} ${y} is a future month \u2014 printing not allowed.`; return;
+  }
+  const daysInMonth = new Date(parseInt(y), parseInt(mo), 0).getDate();
+  const printableDays = (y === todayY && mo === todayM) ? parseInt(today.split('-')[2]) : daysInMonth;
+  info.style.background = '#f0fdf4'; info.style.borderColor = '#a7f3d0'; info.style.color = '#374151';
+  info.textContent = `\uD83D\uDCC5 ${monthNames[parseInt(mo)-1]} ${y} \u2014 ${printableDays} pages will be printed.${printableDays < daysInMonth ? ' (up to today)' : ''}`;
+};
+
+window.executePrint = function() {
+  const today = _todayStr();
+  if (_printTab === 'single') { closePrintModal(); window.printRegister(); return; }
+  let dates = [];
+  if (_printTab === 'range') {
+    const from = document.getElementById('pm-from-date');
+    const to   = document.getElementById('pm-to-date');
+    if (!from.value || !to.value) { alert('Please select both From and To dates.'); return; }
+    if (from.value > today) { alert('From date cannot be a future date.'); return; }
+    if (to.value > today)   { alert('To date cannot be a future date.'); return; }
+    if (from.value > to.value) { alert('From date must be before or equal To date.'); return; }
+    const days = Math.round((new Date(to.value) - new Date(from.value)) / 86400000) + 1;
+    if (days > 62 && !confirm(`You are about to print ${days} pages. Continue?`)) return;
+    let cur = new Date(from.value); const end = new Date(to.value);
+    while (cur <= end) { dates.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate()+1); }
+  }
+  if (_printTab === 'month') {
+    const mo = document.getElementById('pm-month-sel').value.padStart(2,'0');
+    const y  = document.getElementById('pm-year-sel').value;
+    const [todayY, todayM, todayD] = today.split('-');
+    if (y > todayY || (y === todayY && mo > todayM)) { alert('Future month \u2014 printing not allowed.'); return; }
+    const lastDay = (y === todayY && mo === todayM) ? parseInt(todayD) : new Date(parseInt(y), parseInt(mo), 0).getDate();
+    dates = Array.from({length: lastDay}, (_,i) => `${y}-${mo}-${String(i+1).padStart(2,'0')}`);
+  }
+  if (!dates.length) return;
+  closePrintModal();
+  _printChangeoverRange(dates);
+};
+
+function _printChangeoverRange(dates) {
+  function esc(v){ return v ? String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '\u2014'; }
+  const pagesHtml = dates.map((ds, pageIdx) => {
+    const dayData = allRecords.filter(r => r.date === ds).sort((a,b) => (a.timeMin||0)-(b.timeMin||0));
+    const [y,m,d] = ds.split('-'); const dateStr = `${d}/${m}/${y}`;
+    const rowH = dayData.length ? Math.max(8, Math.floor(148 / dayData.length)) : 20;
+    const checkedByList = [...new Set(dayData.map(x => x.checkedBy).filter(Boolean))].join(', ') || 'Vishal Chaturvedi';
+    const rowsHtml = dayData.map((r,i) => `<tr style="height:${rowH}mm;${i%2===1?'background:#f8fafc':''}">
+      <td style="text-align:center;font-weight:700;color:#64748b">${i+1}</td>
+      <td style="white-space:nowrap;font-size:7.5pt;font-weight:600">${esc(r.displayDate)}</td>
+      <td style="font-weight:700;color:#1e293b">${esc(r.previousProduct)}</td>
+      <td style="text-align:center"><span style="background:#dcfce7;color:#15803d;border:1px solid #86efac;padding:1.5pt 5pt;border-radius:3pt;font-size:6.5pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">\u2713 YES</span></td>
+      <td style="font-weight:700;color:#059669">${esc(r.nextProduct)}</td>
+      <td style="text-align:center;white-space:nowrap;font-weight:600">${esc(r.time)}</td>
+      <td style="font-weight:600">${esc(r.cleanedBy)}</td>
+      <td style="font-weight:700;color:#2563eb">${esc(r.checkedBy)}</td>
+    </tr>`).join('') || `<tr><td colspan="8" style="text-align:center;color:#888;padding:20pt">No changeover records for ${dateStr}</td></tr>`;
+    return `<div style="page-break-after:${pageIdx<dates.length-1?'always':'avoid'}">
+<div style="border:2pt solid #000;padding:6pt 8pt;margin-bottom:6pt">
+  <h1 style="font-size:13pt;font-weight:800;text-transform:uppercase">Product Changeover Record \u2014 L V Spices</h1>
+  <p style="font-size:7pt;color:#444;margin-top:2pt">Equipment Cleaning &amp; Line Clearance Before Product Switch \u2022 FSSAI Compliance Log</p>
+  <div style="display:flex;gap:6pt;margin-top:5pt;flex-wrap:wrap">
+    <span style="border:1pt solid #555;padding:1.5pt 6pt;font-size:7pt;border-radius:3pt">\uD83D\uDDD3\uFE0F Date: <b style="color:#b91c1c">${dateStr}</b></span>
+    <span style="border:1pt solid #555;padding:1.5pt 6pt;font-size:7pt;border-radius:3pt">\uD83D\uDCCB Changeovers: <b style="color:#b91c1c">${dayData.length}</b></span>
+    <span style="border:1pt solid #555;padding:1.5pt 6pt;font-size:7pt;border-radius:3pt">\uD83E\uDDFC Cleaning: <b style="color:#15803d">YES \u2014 All Verified</b></span>
+    <span style="border:1pt solid #555;padding:1.5pt 6pt;font-size:7pt;border-radius:3pt">\uD83D\uDC64 Checked By: <b>${esc(checkedByList)}</b></span>
+  </div>
+</div>
+<table style="width:100%;border-collapse:collapse;font-size:8pt">
+  <thead style="display:table-header-group"><tr>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:4%;text-align:center">SR.</th>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:8%">DATE</th>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:23%">PREVIOUS PRODUCT</th>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:11%;text-align:center">CLEANING DONE</th>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:23%">NEXT PRODUCT</th>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:7%;text-align:center">TIME</th>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:12%">CLEANED BY</th>
+    <th style="background:#1a1a1a;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:7pt;padding:5pt 4pt;border:0.75pt solid #000;width:12%">CHECKED BY</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table></div>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>LV Spices \u2014 Product Changeover Record</title>
+<style>@page{size:A4 landscape;margin:8mm}*{margin:0;padding:0;box-sizing:border-box}html,body{font-family:Arial,sans-serif;font-size:8pt;color:#000;background:#fff}td{padding:4pt;border:0.5pt solid #bbb;vertical-align:middle;line-height:1.25}</style>
+</head><body>${pagesHtml}<script>window.onload=function(){window.print();setTimeout(function(){window.close();},800);};<\/script></body></html>`;
+  const pw = window.open('','_blank','width=1200,height=850');
+  if(pw){pw.document.write(html);pw.document.close();}
+  else{alert('Allow popups to use Print.');}
+}
+
+function _initCoPrintListeners() {
+  const fromEl = document.getElementById('pm-from-date');
+  const toEl   = document.getElementById('pm-to-date');
+  if (fromEl) { fromEl.addEventListener('change', _coRangeInfo); fromEl.addEventListener('input', _coRangeInfo); }
+  if (toEl)   { toEl.addEventListener('change', _coRangeInfo);   toEl.addEventListener('input', _coRangeInfo); }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _initCoPrintListeners);
+} else {
+  _initCoPrintListeners();
+}
