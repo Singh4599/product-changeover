@@ -489,10 +489,11 @@ window.editCurrentRecord = function () {
 
 // ── EXCEL EXPORT ──────────────────────────────────────────────────────────────
 window.exportExcel = function () {
-  // Export selected day or all records
+  // Export selected day or all records — filtered by active unit
+  const base = unitRecords();
   const rows = selectedDate
-    ? allRecords.filter(r => r.date === selectedDate).sort((a, b) => (a.timeMin || 0) - (b.timeMin || 0))
-    : allRecords.slice(0, 500); // cap at 500 for performance
+    ? base.filter(r => r.date === selectedDate).sort((a, b) => (a.timeMin || 0) - (b.timeMin || 0))
+    : base.slice(0, 500); // cap at 500 for performance
 
   if (!rows.length) { alert('No records to export'); return; }
 
@@ -513,9 +514,10 @@ window.exportExcel = function () {
 };
 
 window.printRegister = window.printPage = function () {
+  const base = unitRecords();
   const data = selectedDate
-    ? allRecords.filter(r => r.date === selectedDate).sort((a, b) => (a.timeMin || 0) - (b.timeMin || 0))
-    : allRecords.slice(0, 50);
+    ? base.filter(r => r.date === selectedDate).sort((a, b) => (a.timeMin || 0) - (b.timeMin || 0))
+    : base.slice(0, 50);
 
   if (!data || !data.length) {
     alert('No changeover records to print.');
@@ -564,7 +566,7 @@ window.printRegister = window.printPage = function () {
   .sig{margin-top:14pt;font-size:8pt;display:flex;justify-content:space-between;padding:0 4pt}
 </style></head><body>
 <div class="hdr">
-  <h1>Product Changeover Record — L V Spices</h1>
+  <h1>Product Changeover Record — L V Spices • ${activeUnit}</h1>
   <p>Equipment Cleaning &amp; Line Clearance Before Product Switch • FSSAI Food Safety Hygiene Compliance Log</p>
   <div class="pills">
     <span class="pill">🗓️ Date: <b>${dateStr}</b></span>
@@ -725,7 +727,7 @@ window.executePrint = function() {
 function _printChangeoverRange(dates) {
   function esc(v){ return v ? String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '\u2014'; }
   const pagesHtml = dates.map((ds, pageIdx) => {
-    const dayData = allRecords.filter(r => r.date === ds).sort((a,b) => (a.timeMin||0)-(b.timeMin||0));
+    const dayData = unitRecords().filter(r => r.date === ds).sort((a,b) => (a.timeMin||0)-(b.timeMin||0));
     const [y,m,d] = ds.split('-'); const dateStr = `${d}/${m}/${y}`;
     const rowH = dayData.length ? Math.max(8, Math.floor(148 / dayData.length)) : 20;
     const checkedByList = [...new Set(dayData.map(x => x.checkedBy).filter(Boolean))].join(', ') || 'Vishal Chaturvedi';
@@ -741,7 +743,7 @@ function _printChangeoverRange(dates) {
     </tr>`).join('') || `<tr><td colspan="8" style="text-align:center;color:#888;padding:20pt">No changeover records for ${dateStr}</td></tr>`;
     return `<div style="page-break-after:${pageIdx<dates.length-1?'always':'avoid'}">
 <div style="border:2pt solid #000;padding:6pt 8pt;margin-bottom:6pt">
-  <h1 style="font-size:13pt;font-weight:800;text-transform:uppercase">Product Changeover Record \u2014 L V Spices</h1>
+  <h1 style="font-size:13pt;font-weight:800;text-transform:uppercase">Product Changeover Record \u2014 L V Spices \u2022 ${activeUnit}</h1>
   <p style="font-size:7pt;color:#444;margin-top:2pt">Equipment Cleaning &amp; Line Clearance Before Product Switch \u2022 FSSAI Compliance Log</p>
   <div style="display:flex;gap:6pt;margin-top:5pt;flex-wrap:wrap">
     <span style="border:1pt solid #555;padding:1.5pt 6pt;font-size:7pt;border-radius:3pt">\uD83D\uDDD3\uFE0F Date: <b style="color:#b91c1c">${dateStr}</b></span>
