@@ -48,6 +48,28 @@ let selectedDate = null; // currently selected date in sidebar
 let searchQuery = '';
 let editingId = null;
 
+// ── UNIT FILTER ───────────────────────────────────────────────────────────────
+const UNIT_STORAGE_KEY = 'lv_changeover_active_unit';
+let activeUnit = localStorage.getItem(UNIT_STORAGE_KEY) || 'Unit 11';
+
+window.setActiveUnit = function(unit) {
+  activeUnit = unit;
+  localStorage.setItem(UNIT_STORAGE_KEY, unit);
+  document.getElementById('unit-btn-11')?.classList.toggle('active', unit === 'Unit 11');
+  document.getElementById('unit-btn-12')?.classList.toggle('active', unit === 'Unit 12');
+  renderSidebarStats();
+  renderSidebarDates();
+};
+
+function initUnitToggle() {
+  document.getElementById('unit-btn-11')?.classList.toggle('active', activeUnit === 'Unit 11');
+  document.getElementById('unit-btn-12')?.classList.toggle('active', activeUnit === 'Unit 12');
+}
+
+function unitRecords() {
+  return allRecords.filter(r => (r.unit || 'Unit 11') === activeUnit);
+}
+
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function seedRng(seed) {
   let s = (seed | 0) + 1;
@@ -145,6 +167,7 @@ function generateAllRecords() {
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
+  initUnitToggle();
   updateSidebarStats({ total: 0, today: 0, workers: 0 });
   document.getElementById('record-list').innerHTML = '<div class="loading-msg">Generating records…</div>';
 
@@ -182,9 +205,10 @@ async function init() {
 // ── SIDEBAR STATS ─────────────────────────────────────────────────────────────
 function renderSidebarStats() {
   const today = new Date().toISOString().split('T')[0];
-  const todayRecs = allRecords.filter(r => r.date === today);
-  const uniqueWorkers = new Set(allRecords.map(r => r.cleanedBy)).size;
-  updateSidebarStats({ total: allRecords.length, today: todayRecs.length, workers: uniqueWorkers });
+  const recs = unitRecords();
+  const todayRecs = recs.filter(r => r.date === today);
+  const uniqueWorkers = new Set(recs.map(r => r.cleanedBy)).size;
+  updateSidebarStats({ total: recs.length, today: todayRecs.length, workers: uniqueWorkers });
 }
 
 function updateSidebarStats({ total, today, workers }) {
@@ -199,9 +223,9 @@ function renderSidebarDates() {
   const el = document.getElementById('record-list');
   if (!el) return;
 
-  // Group records by date
+  // Group records by date (unit-filtered)
   const dateMap = {};
-  allRecords.forEach(r => {
+  unitRecords().forEach(r => {
     if (!dateMap[r.date]) dateMap[r.date] = [];
     dateMap[r.date].push(r);
   });
